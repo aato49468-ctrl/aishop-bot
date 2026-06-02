@@ -164,13 +164,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         plan = pending.get(buyer_id, {}).get("plan", "full")
 
         if KEYS.get(plan):
-            key = KEYS[plan].pop(0)
+            key = KEYS[plan][0]
             try:
                 await context.bot.send_message(
                     buyer_id,
                     f"✅ *Оплата подтверждена!*\n\n"
                     f"Ваш ключ доступа:\n`{key}`\n\n"
-                    f"Введите его на сайте в разделе «🔑 Ввести ключ».\n"
+                    f"Сайт: https://starlit-clafoutis-732c22.netlify.app\nПрямой доступ: https://Arena.ai\n"
                     f"Спасибо за покупку! 🎉",
                     parse_mode="Markdown"
                 )
