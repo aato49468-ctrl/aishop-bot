@@ -1,5 +1,4 @@
 import logging
-import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -7,33 +6,21 @@ from telegram.ext import (
 )
 
 # ══════════════════════════════════════════
-#  НАСТРОЙКИ — заполни сам
-# ══════════════════════════════════════════  
+#  НАСТРОЙКИ
+# ══════════════════════════════════════════
 TOKEN = "8013963072:AAEzxuWWMPzgRKb79ZD5cX4hlDI-KVukoJk"
 ADMIN_ID = 6739433421
 
-# Ключи для каждого тарифа: ключ -> URL
 KEYS = {
-    "base": [
-        # Добавь ключи для базового тарифа
-        # "ключ1",
-        # "ключ2",
-    ],
-    "standard": [
-        # Добавь ключи для стандарта
-    ],
-    "full": [
-        # Добавь ключи для "всё включено"
-        "Aato",  # пример
-    ],
+    "base": [],
+    "standard": [],
+    "full": ["Aato", "SoriWer"],
 }
 
-# Реквизиты оплаты
 CARD = "2200 1516 6166 6938"
 OWNER = "Альберт Шукуров"
 BANK = "Альфа Банк"
 
-# Цены
 PRICES = {
     "base":     ("Базовый",       "299₽",  "50+ ИИ, 1 устройство"),
     "standard": ("Стандарт",      "699₽",  "200+ ИИ, 3 устройства"),
@@ -45,8 +32,8 @@ PRICES = {
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Хранилище заявок: {user_id: {"plan": ..., "username": ...}}
 pending = {}
+sold = []
 
 
 def main_menu():
@@ -80,6 +67,61 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def restart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔄 Главное меню:", reply_markup=main_menu())
+
+
+async def profile_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user_sales = [s for s in sold if s["user_id"] == user_id]
+    if user_sales:
+        last = user_sales[-1]
+        plan_name = PRICES.get(last["plan"], (last["plan"],))[0]
+        await update.message.reply_text(
+            f"👤 *Ваш профиль*\n\n"
+            f"📦 Тариф: {plan_name}\n"
+            f"🔑 Ключ: `{last['key']}`\n\n"
+            f"Сайт: https://starlit-clafoutis-732c22.netlify.app",
+            parse_mode="Markdown"
+        )
+    else:
+        await update.message.reply_text(
+            "❌ У вас нет активной подписки.\n\nНажмите /start чтобы купить!",
+            reply_markup=main_menu()
+        )
+
+
+async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Нет доступа.")
+        return
+
+    total = len(sold)
+    plan_counts = {}
+    for s in sold:
+        p = s["plan"]
+        plan_counts[p] = plan_counts.get(p, 0) + 1
+
+    plan_stats = ""
+    for plan, count in plan_counts.items():
+        plan_name = PRICES.get(plan, (plan,))[0]
+        plan_stats += f"  • {plan_name}: {count} продаж\n"
+
+    if not plan_stats:
+        plan_stats = "  Пока нет продаж"
+
+    await update.message.reply_text(
+        f"📊 *Админ-панель*\n\n"
+        f"💰 Всего продаж: {total}\n\n"
+        f"По тарифам:\n{plan_stats}\n"
+        f"🔑 Ключи:\n"
+        f"  • Базовый: {len(KEYS['base'])}\n"
+        f"  • Стандарт: {len(KEYS['standard'])}\n"
+        f"  • Всё включено: {len(KEYS['full'])} — {', '.join(KEYS['full'])}",
+        parse_mode="Markdown"
+    )
+
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -100,18 +142,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         plan = data.replace("plan_", "")
         name, price, desc = PRICES[plan]
         pending[user.id] = {"plan": plan, "username": user.username or user.first_name}
-
-        keyboard = [[InlineKeyboardButton("✅ Я оплатил, вот скриншот", callback_data=f"paid_{plan}")],
-                    [InlineKeyboardButton("◀️ Назад", callback_data="buy")]]
-
+        keyboard = [
+            [InlineKeyboardButton("✅ Я оплатил, вот скриншот", callback_data=f"paid_{plan}")],
+            [InlineKeyboardButton("◀️ Назад", callback_data="buy")]
+        ]
         await query.edit_message_text(
             f"💳 *Оплата — {name}*\n\n"
             f"Сумма: *{price}*\n"
             f"Включено: {desc}\n\n"
-            f"Переведите на карту:\n"
-            f"`{CARD}`\n"
-            f"Банк: {BANK}\n"
-            f"Получатель: {OWNER}\n\n"
+            f"Переведите на карту:\n`{CARD}`\n"
+            f"Банк: {BANK}\nПолучатель: {OWNER}\n\n"
             f"⚠️ *Важно:* переводите *без комментария!*\n"
             f"После оплаты нажмите кнопку ниже и отправьте скриншот.",
             parse_mode="Markdown",
@@ -144,49 +184,52 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "faq":
         await query.edit_message_text(
             "❓ *Частые вопросы*\n\n"
-            "*Это легально?*\nДа, всё официально. Никаких взломов.\n\n"
-            "*Как получить доступ?*\nОплатите → пришлите скриншот → получите ключ за 5-10 минут.\n\n"
+            "*Это легально?*\nДа, всё официально.\n\n"
+            "*Как получить доступ?*\nОплатите → скриншот → ключ за 5-10 минут.\n\n"
             "*Возврат?*\nДа, в течение 24 часов если ключ не активирован.\n\n"
-            "*Сколько устройств?*\nЗависит от тарифа: 1 / 3 / безлимит.",
+            "*Сколько устройств?*\n1 / 3 / безлимит по тарифу.",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="back")]])
         )
 
     elif data == "back":
-        await query.edit_message_text(
-            "Главное меню:",
-            reply_markup=main_menu()
-        )
+        await query.edit_message_text("Главное меню:", reply_markup=main_menu())
 
-    # Админ подтверждает оплату
-    elif data.startswith("approve_"):
-        buyer_id = int(data.replace("approve_", ""))
+    elif data.startswith("sendkey_"):
+        parts = data.replace("sendkey_", "").split("_")
+        buyer_id = int(parts[0])
+        key_index = int(parts[1])
         plan = pending.get(buyer_id, {}).get("plan", "full")
+        username = pending.get(buyer_id, {}).get("username", "Unknown")
 
-        if KEYS.get(plan):
-            key = KEYS[plan][0]
+        if plan in KEYS and key_index < len(KEYS[plan]):
+            key = KEYS[plan][key_index]
             try:
                 await context.bot.send_message(
                     buyer_id,
                     f"✅ *Оплата подтверждена!*\n\n"
                     f"Ваш ключ доступа:\n`{key}`\n\n"
-                    f"Сайт: https://starlit-clafoutis-732c22.netlify.app\nПрямой доступ: https://Arena.ai\n"
+                    f"Сайт: https://starlit-clafoutis-732c22.netlify.app\n"
+                    f"Прямой доступ: https://Arena.ai\n"
                     f"Спасибо за покупку! 🎉",
                     parse_mode="Markdown"
                 )
-                await query.edit_message_text(f"✅ Ключ отправлен покупателю {buyer_id}.")
+                sold.append({"user_id": buyer_id, "username": username, "plan": plan, "key": key})
+                await query.edit_message_text(
+                    f"✅ Ключ `{key}` отправлен @{username}",
+                    parse_mode="Markdown"
+                )
             except Exception as e:
-                await query.edit_message_text(f"Ошибка отправки: {e}")
+                await query.edit_message_text(f"❌ Ошибка: {e}")
         else:
-            await query.edit_message_text("❌ Ключи для этого тарифа закончились! Добавь новые в bot.py")
+            await query.edit_message_text("❌ Ключ не найден!")
 
     elif data.startswith("reject_"):
         buyer_id = int(data.replace("reject_", ""))
         try:
             await context.bot.send_message(
                 buyer_id,
-                "❌ К сожалению, скриншот оплаты не подтверждён.\n"
-                "Пожалуйста, свяжитесь с поддержкой: @SoriWerr"
+                "❌ Скриншот оплаты не подтверждён.\nСвяжитесь с поддержкой: @SoriWerr"
             )
             await query.edit_message_text("Заявка отклонена.")
         except Exception as e:
@@ -197,26 +240,28 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     msg = update.message
 
-    # Пользователь прислал скриншот
     if msg.photo and user.id in pending and pending[user.id].get("waiting_screenshot"):
         plan_key = pending[user.id]["plan"]
         plan_name = PRICES[plan_key][0]
         price = PRICES[plan_key][1]
         username = pending[user.id]["username"]
 
-        keyboard = [
-            [InlineKeyboardButton("✅ Подтвердить и выдать ключ", callback_data=f"approve_{user.id}")],
-            [InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_{user.id}")],
-        ]
+        keyboard = []
+        if plan_key in KEYS and KEYS[plan_key]:
+            for i, key in enumerate(KEYS[plan_key]):
+                keyboard.append([InlineKeyboardButton(f"🔑 Отправить: {key}", callback_data=f"sendkey_{user.id}_{i}")])
+        else:
+            keyboard.append([InlineKeyboardButton("⚠️ Нет ключей", callback_data="none")])
+        keyboard.append([InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_{user.id}")])
 
         await context.bot.forward_message(ADMIN_ID, msg.chat_id, msg.message_id)
         await context.bot.send_message(
             ADMIN_ID,
-            f"💳 *Новая заявка на оплату!*\n\n"
-            f"👤 Пользователь: @{username} (`{user.id}`)\n"
+            f"💳 *Новая заявка!*\n\n"
+            f"👤 @{username} (`{user.id}`)\n"
             f"📦 Тариф: {plan_name}\n"
             f"💰 Сумма: {price}\n\n"
-            f"Подтвердите оплату:",
+            f"Выберите ключ для отправки:",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -227,12 +272,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Ключ придёт в течение нескольких минут. ⏱"
         )
 
-    # Пользователь вводит ключ
     elif context.user_data.get("waiting_key"):
         context.user_data["waiting_key"] = False
         await msg.reply_text(
             "🔑 Ключ нужно вводить на сайте!\n\n"
-            "Зайдите на сайт и нажмите кнопку «🔑 Ввести ключ».",
+            "Зайдите на сайт и нажмите «🔑 Ввести ключ».",
             reply_markup=main_menu()
         )
 
@@ -243,9 +287,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("restart", restart_cmd))
+    app.add_handler(CommandHandler("profile", profile_cmd))
+    app.add_handler(CommandHandler("admin", admin_cmd))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ALL, message_handler))
-    print("Бот запущен! Нажми Ctrl+C для остановки.")
+    print("Бот запущен!")
     app.run_polling()
 
 
