@@ -12,8 +12,8 @@ TOKEN = "8013963072:AAEzxuWWMPzgRKb79ZD5cX4hlDI-KVukoJk"
 ADMIN_ID = 6739433421
 
 KEYS = {
-    "base": [],
-    "standard": [],
+ "base": ["Aato", "SoriWer"],
+      "standard": ["Aato", "SoriWer"],
     "full": ["Aato", "SoriWer"],
 }
 
