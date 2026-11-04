@@ -7,6 +7,8 @@ import json
 import pathlib
 import shutil
 
+import lattice
+
 ROOT = pathlib.Path(__file__).parent
 BUILD = ROOT / "build"
 
@@ -172,8 +174,12 @@ def main():
             (fn_dir / f"cube_{name}.mcfunction").write_text("\n".join(cube_commands(R, False)) + "\n", encoding="utf-8")
             (fn_dir / f"cube_grid_{name}.mcfunction").write_text("\n".join(cube_commands(R, True)) + "\n", encoding="utf-8")
             (fn_dir / f"cube_remove_{name}.mcfunction").write_text("\n".join(cube_remove(R)) + "\n", encoding="utf-8")
+        for name, n in lattice.LATTICE_SIZES.items():
+            for fname, lines in lattice.files_for(name, n).items():
+                (fn_dir / f"{fname}.mcfunction").write_text("\n".join(lines) + "\n", encoding="utf-8")
         shutil.make_archive(str(pack), "zip", pack)
         shutil.rmtree(pack)
+    lattice.summary()
     for name, R in SIZES.items():
         s = stats(R)
         print(f"{name:6}: основание {2*R+1}x{2*R+1}, высота {R+1}, стекло {s['glass']}, "
