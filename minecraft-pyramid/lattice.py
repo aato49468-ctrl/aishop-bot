@@ -1,11 +1,11 @@
 """Генератор «стеклянной решётки» — копия постройки из видео.
 
 Огромный куб, заполненный стеклянными блоками через один (стекло — пустота — стекло по всем трём осям),
-внутри разбросаны обычные фонари (стоят на стекле и висят под стеклом).
+под каждым стеклом висит обычный фонарь (как в видео).
 
 Как строится внутри игры (чтобы уложиться в лимиты Minecraft 1.18.2):
   1. forceload — загружаем все чанки под постройкой, ставим невидимый маркер в точке игрока;
-  2. через 2 секунды: очищаем объём, строим одну «плитку» 32x32x32 (4096 стёкол + фонари),
+  2. через 2 секунды: очищаем объём, строим одну «плитку» 32x32x32 (4096 стёкол + 4096 фонарей),
      затем копируем её /clone на весь объём (у /fill и /clone лимит 32768 блоков за раз).
 Вызывается из generate.py.
 """
@@ -14,19 +14,17 @@ import random
 T = 32  # размер плитки
 # имя -> количество плиток по каждой оси
 LATTICE_SIZES = {"small": 2, "medium": 4, "large": 6, "huge": 7}
-LANTERNS_PER_TILE = 140
 GLASS = "minecraft:glass"
 LANTERN = "minecraft:lantern"
 HANGING = "minecraft:lantern[hanging=true]"
 FLOOR = "minecraft:black_concrete"
 
 
-def tile_cells(seed: int = 52):
-    """Стекло в позициях (чёт, чёт, чёт); фонари — в клетках (чёт, нечёт, чёт): над ними и под ними стекло."""
-    glass = [(x, y, z) for x in range(0, T, 2) for y in range(0, T, 2) for z in range(0, T, 2)]
-    rnd = random.Random(seed)
-    spots = [(x, y, z) for x in range(0, T, 2) for y in range(1, T - 1, 2) for z in range(0, T, 2)]
-    lanterns = [(p, rnd.random() < 0.5) for p in rnd.sample(spots, LANTERNS_PER_TILE)]
+def tile_cells():
+    """Как в видео: стекло в позициях (чёт, нечёт, чёт), прямо под каждым стеклом висит фонарь (чёт, чёт, чёт).
+    Получается столбик «фонарь — стекло — фонарь — стекло...», самый нижний ряд фонарей висит над полом."""
+    glass = [(x, y, z) for x in range(0, T, 2) for y in range(1, T, 2) for z in range(0, T, 2)]
+    lanterns = [((x, y - 1, z), True) for x, y, z in glass]
     return glass, lanterns
 
 
@@ -62,10 +60,6 @@ def files_for(name: str, n: int) -> dict[str, list[str]]:
         for x, z in ((i, -h - 2), (i, h + 1), (-h - 2, i), (h + 1, i), (i, -h - 1), (i, h), (-h - 1, i), (h, i)):
             if not (-h <= x < h and -h <= z < h):
                 b.append(f"setblock ~{x} ~-1 ~{z} {FLOOR}")
-    # фонари по периметру снаружи (как в видео)
-    for i in range(-h - 1, h + 1, 2):
-        for x, z in ((i, -h - 2), (i, h + 1), (-h - 2, i), (h + 1, i)):
-            b.append(f"setblock ~{x} ~0 ~{z} {LANTERN}")
     # первая плитка
     glass, lanterns = tile_cells()
     for x, y, z in glass:
@@ -119,4 +113,4 @@ def summary():
         S = n * T
         tiles = n ** 3
         print(f"lattice_{name:6}: куб {S}x{S}x{S}, стекла {len(glass)*tiles:,}, фонарей {len(lanterns)*tiles:,}"
-              f" (+{2*S+4} снаружи), нужно стоять не выше Y={320-S}")
+              f", нужно стоять не выше Y={320-S}")
